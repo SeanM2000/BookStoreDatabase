@@ -170,7 +170,7 @@ class User{
 					System.out.println("Exception: " + sqle);
 				}
 			}
-			if(newUserType.equals("customer")){
+			else if(newUserType.equals("customer")){
 				try (Connection connection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/LookInnaBook", "postgres", "Exhibition2012");
 					PreparedStatement statement = connection.prepareStatement("select * from customer where username = ?");) {
 					statement.setString(1, checkUsername);
@@ -307,20 +307,20 @@ public class LookInnaBook {
 				System.out.println("Browse Collections");
 				System.out.println("View Cart");
 				System.out.println("Log In");
-				//System.out.println("Create Account");
+				System.out.println("Create Account");
 				
 			}
 			else if(client.usertype.equals("customer")){
 				System.out.println("Browse Collections");
 				System.out.println("View Cart");
-				//System.out.println("View Profile");
+				System.out.println("View Profile");
 				System.out.println("Log Out");
 			}
 			else if(client.usertype.equals("owner")){
 				System.out.println("Browse Collections");
 				System.out.println("Browse Books");
 				System.out.println("Own Collection");
-				System.out.println("View Profile");
+				//System.out.println("View Profile");
 				System.out.println("Log Out");
 			}
 			else{
@@ -345,18 +345,93 @@ public class LookInnaBook {
 			else if(inputCMD.equals("view cart") && (client.usertype.equals("customer") || client.usertype.equals("user"))){
 				client.cartMenu();
 			}
+			else if(inputCMD.equals("view profile") && client.usertype.equals("customer")){
+				customerProfile(client);
+			}
+			else if(inputCMD.equals("create account") && client.usertype.equals("user")){
+				createAccount(client);
+			}
+			else if(inputCMD.equals("browse books") && client.usertype.equals("owner")){
+				bookMenu(client);
+			}
+			else if(inputCMD.equals("own collection") && client.usertype.equals("owner")){
+				ArrayList<Collection> collections = getCollections("%%", client.username);
+				for(int i=0; i<collections.size(); i++){
+					System.out.printf("(" + i + ") ");
+					collections.get(i).print();
+				}
+			}
 			else{
 				System.out.println("Invalid Input");
 			}
 		}
     }
 	
+	public static void customerProfile(User client){
+		System.out.println("Order History");
+		System.out.println("-------------");
+		try (Connection connection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/LookInnaBook", "postgres", "Exhibition2012");
+            PreparedStatement statement = connection.prepareStatement("select * from customerprofile where customer_username = ?");
+			)
+		{
+			statement.setString(1, client.username);
+			ResultSet resultSet = statement.executeQuery();
+			while(resultSet.next()){
+				System.out.println(resultSet.getString("book_name") + "\t Cost: $" + resultSet.getDouble("orderprice") + "\t Quantity: " +resultSet.getInt("quantity")+ 
+				"\nFrom: " + resultSet.getString("owner_username") + " \tDate: " + resultSet.getObject("transfer_date") + "\n");
+			}
+        } catch (Exception sqle) {
+            System.out.println("Exception: " + sqle);
+			
+        }
+	}
+	
+	public static void createAccount(User client){
+		Scanner getInput = new Scanner(System.in);
+		String newUserType = "";
+		String newUsername = "";
+		while(!newUserType.equals("owner") && !newUserType.equals("customer")){
+			System.out.printf("Sign Up as an owner or a customer?: ");
+			newUserType = getInput.nextLine().toLowerCase();
+		}
+		System.out.printf("Input Username: ");
+		newUsername = getInput.nextLine();
+		if(newUserType.equals("owner")){
+				try (Connection connection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/LookInnaBook", "postgres", "Exhibition2012");
+					PreparedStatement statement = connection.prepareStatement("insert into owner(username) values(?) returning username");) {
+					statement.setString(1, newUsername);
+					System.out.println(statement.toString());
+					ResultSet resultSet = statement.executeQuery();
+					while(resultSet.next()){
+						client.username = resultSet.getString("username");
+						client.usertype = "owner";
+					}
+				} catch (Exception sqle) {
+					System.out.println("Exception: " + sqle);
+				}
+			}
+			else if(newUserType.equals("customer")){
+				try (Connection connection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/LookInnaBook", "postgres", "Exhibition2012");
+					PreparedStatement statement = connection.prepareStatement("insert into customer(username) values(?) returning username");) {
+					statement.setString(1, newUsername);
+					ResultSet resultSet = statement.executeQuery();
+					while(resultSet.next()){
+						client.username = resultSet.getString("username");
+						client.usertype = "customer";
+					}
+				} catch (Exception sqle) {
+					System.out.println("Exception: " + sqle);
+				}
+			}
+		
+	}
+	
 	public static void collectionsMenu(User client){
 		Scanner scanInput = new Scanner(System.in);
 		String inputCMD = "";
 		int inputNum = 0;
 		int quantityNum = 0;
-		ArrayList<Collection> collections = getCollections("");
+		ArrayList<Collection> collections = getCollections("%%", "%%");
 		for(int i=0; i<collections.size(); i++){
 			System.out.printf("(" + i + ") ");
 			collections.get(i).print();
@@ -397,13 +472,14 @@ public class LookInnaBook {
 		}
 	}
 	
-	public static ArrayList<Collection> getCollections(String add){
+	public static ArrayList<Collection> getCollections(String inbook, String inowner){
 		ArrayList<Collection> collections = new ArrayList<Collection>();
 		try (Connection connection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/LookInnaBook", "postgres", "Exhibition2012");
-            PreparedStatement statement = connection.prepareStatement("select * from viewstore where book_name like ?");
+            PreparedStatement statement = connection.prepareStatement("select * from viewstore where book_name like ? and owner_username like ?");
 			)
 		{
-			statement.setString(1, "%" + add + "%");
+			statement.setString(1, inbook);
+			statement.setString(2, inowner);
 			ResultSet resultSet = statement.executeQuery();
 			while(resultSet.next()){
 				 collections.add(new Collection(resultSet.getString("owner_username"), resultSet.getString("book_name"), resultSet.getBigDecimal("isbn"), 
@@ -416,6 +492,60 @@ public class LookInnaBook {
 		return collections;
 	}
 	
+	public static void bookMenu(User client){
+		Scanner scanInput = new Scanner(System.in);
+		String inputCMD = "";
+		BigDecimal inISBN;
+		int quantityNum = 0;
+		BigDecimal setPrice;
+		HashMap<BigDecimal, Book> offeredBooks;
+		while(true){
+			System.out.println("---------------------------------\n");
+			offeredBooks = getBooks();
+			for (BigDecimal i : offeredBooks.keySet()) {
+				System.out.printf("("+i+"): ");
+				offeredBooks.get(i).print();
+			}
+			System.out.println("Stock Book | Exit/Return\n");
+			System.out.printf("Choose: ");
+			inputCMD = scanInput.nextLine().toLowerCase();
+			if(inputCMD.equals("exit") || inputCMD.equals("return")){ return; }
+			else if(inputCMD.equals("stock book")) { 
+				System.out.printf("Add which book to the cart (isbn): ");
+				inISBN = scanInput.nextBigDecimal();
+				scanInput.nextLine();
+				if(offeredBooks.containsKey(inISBN)){
+					do{
+					System.out.printf("Buy how many? (0 to cancel): ");
+					quantityNum = scanInput.nextInt();
+					scanInput.nextLine();
+					}while(quantityNum<0);
+					if(quantityNum == 0){ System.out.printf("Order Cancelled"); continue;}
+					do{
+						System.out.printf("Set the price($): ");
+						setPrice = scanInput.nextBigDecimal();
+						scanInput.nextLine();
+					}while(setPrice.longValue()<0);
+					addBooktoCollection(client, inISBN, quantityNum, setPrice);
+				}
+				else { System.out.println("Book with ISBN " + inISBN.longValue() + " does not exist\n"); }
+			}
+			else {System.out.println("Invalid Input");}
+		}
+	}
+	public static void addBooktoCollection(User client, BigDecimal inISBN, int quantityNum, BigDecimal price){
+		try (Connection connection = DriverManager.getConnection("jdbc:postgresql://localhost:5432/LookInnaBook", "postgres", "Exhibition2012");
+			PreparedStatement statement = connection.prepareStatement("call buyfrompublisher(?, ?, ?, ?)");) {
+			statement.setString(1, client.username);
+			statement.setBigDecimal(2, inISBN);
+			statement.setInt(3, quantityNum);
+			statement.setBigDecimal(4, price);
+			statement.execute();
+		} catch (Exception sqle) {
+			System.out.println("Exception: " + sqle);
+		}
+		return;
+	}
 	
 	public static HashMap<BigDecimal, Book> getBooks(){
 		HashMap<BigDecimal, Book> books = new HashMap<BigDecimal, Book>();
